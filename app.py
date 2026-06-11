@@ -114,7 +114,12 @@ else:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button(f"🔒 Unlock for £{fee_setting}", key=f"pay_{index}", type="primary"):
                             st.success(f"💳 Initializing secure checkout sequence...")
-                            st.info(f"**Verified Asset Link Ready:** {row.get('link', '#')}")
+                            
+                            # Create a clean info box container
+                            with st.container(border=True):
+                                st.markdown("🍏 **Asset Unlocked**")
+                                # Use a stable link button that forces the browser to open the exact URL safely
+                                st.link_button("🌐 View Full Deal Page", row.get('link', '#'), use_container_width=True)
                             
         else:
             st.warning("⚠️ Cloud connection is active, but your database is currently blank. Execute your local loader pipeline to stream records here!")
