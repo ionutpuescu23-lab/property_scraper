@@ -97,6 +97,7 @@ else:
             st.write("Review aggregated off-market profiles below. Click **'Analyze Deal Structure'** to review masked indicators.")
             
             # Loop through records to build interactive deals panel
+           # Loop through individual database entries to render custom property slots
             for index, row in df.iterrows():
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([3, 1, 1])
@@ -104,22 +105,58 @@ else:
                     with c1:
                         st.subheader(f"🏠 {row.get('title', 'Unknown Sourced Asset')}")
                         st.markdown(f"**Target Signals Captured:** :red[{row.get('keywords_found', 'N/A')}]")
-                        st.text(f"Price: {row.get('price', 'N/A')} | Reduced Status: {row.get('reduced', 'N/A')}")
+                        st.text(f"Market Price: {row.get('price', 'N/A')} | Reduced Status: {row.get('reduced', 'N/A')}")
                         
                     with c2:
                         st.markdown("<br>", unsafe_allow_html=True)
-                        st.button("🔍 Analyze Deal Structure", key=f"analysis_{index}")
+                        # We change this to an expander toggle so it drops open right below the card!
+                        analyze_deal = st.checkbox("🔍 Analyze Deal Structure", key=f"analysis_{index}")
                         
                     with c3:
                         st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button(f"🔒 Unlock for £{fee_setting}", key=f"pay_{index}", type="primary"):
-                            st.success(f"💳 Initializing secure checkout sequence...")
+                        pay_clicked = st.button(f"🔒 Unlock for £{fee_setting}", key=f"pay_{index}", type="primary")
+
+                    # 📉 DROP DOWN ANALYTICS PANEL (Triggers when check box is active)
+                    if analyze_deal:
+                        st.markdown("---")
+                        st.markdown("### 📊 Proprietary Underwriting Data Matrix")
+                        
+                        # Split analytics panel into 2 clean columns
+                        left_panel, right_panel = st.columns(2)
+                        
+                        with left_panel:
+                            st.markdown("#### **📍 Asset Overview & Signals**")
+                            st.info(f"**Target Sourcing Keywords Detected:** {row.get('keywords_found', 'N/A')}")
+                            st.write(f"This asset was flagged by the background scraper tracking raw market anomalies in Liverpool and the Wirral. It matches structural distress or motivated vendor criteria.")
+                        
+                        with right_panel:
+                            st.markdown("#### **🧮 Live BRRRR Deal Calculator**")
+                            # Pull price numeric value safely (stripping £ or commas if they exist)
+                            try:
+                                raw_price = float(''.join(c for c in str(row.get('price', '0')) if c.isdigit()))
+                            except ValueError:
+                                raw_price = 100000.0
+                                
+                            # Interactive calculator widgets specific to this property
+                            estimated_rehab = st.number_input("Estimated Rehab/Renovation (£)", min_value=0, value=25000, step=2500, key=f"rehab_{index}")
+                            projected_rent = st.number_input("Projected Monthly Rent (£)", min_value=0, value=850, step=50, key=f"rent_{index}")
                             
-                            # Create a clean info box container
-                            with st.container(border=True):
-                                st.markdown("🍏 **Asset Unlocked**")
-                                # Use a stable link button that forces the browser to open the exact URL safely
-                                st.link_button("🌐 View Full Deal Page", row.get('link', '#'), use_container_width=True)
+                            # Simple dynamic calculations
+                            total_capital_in = raw_price + estimated_rehab
+                            annual_gross_yield = (projected_rent * 12) / total_capital_in if total_capital_in > 0 else 0
+                            
+                            st.metric("Estimated Total Capital Investment", f"£{total_capital_in:,}")
+                            st.metric("Projected Gross Yield on Cost", f"{annual_gross_yield:.2%}")
+
+                    # 💳 UNLOCK DATA OVERLAY (Triggers when they hit the pay button)
+                    if pay_clicked:
+                        st.markdown("---")
+                        with st.container(border=True):
+                            st.success(f"💳 Initializing secure checkout sequence for Sourcing Premium...")
+                            st.markdown("### 🔑 Sourcing Verification Unlocked")
+                            st.write(f"**Direct Secure Vendor Lead URL:**")
+                            # Render a clean, safe clickable button that never breaks strings
+                            st.link_button("🌐 Open Source Listing Link", row.get('link', '#'), type="primary", use_container_width=True)
                             
         else:
             st.warning("⚠️ Cloud connection is active, but your database is currently blank. Execute your local loader pipeline to stream records here!")
