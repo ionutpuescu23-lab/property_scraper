@@ -34,8 +34,9 @@ if st.sidebar.button("Verify Credentials") or st.session_state["authenticated"]:
         # ----------------------------------------------------
         # YOUR DATABASE TABLES & DATA LOADING LOGIC GOES HERE
         # ----------------------------------------------------
-        df = supabase.table("distressed_properties").select("*").execute()
+        
         st.write("Displaying distressed property deals data stream...")
+
 
     else:
         st.error("❌ Invalid Credentials. Security barrier active.")
