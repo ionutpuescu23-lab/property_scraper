@@ -1,10 +1,13 @@
+import os
 import streamlit as st
+import pandas as pd
 from supabase import create_client
 
-# Streamlit looks at your local .env locally, and its secure Cloud Vault in production!
+# 1. Route credentials directly from your saved advanced cloud secrets vault
 url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
 key = st.secrets.get("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
+# 2. Fire up the client
 supabase = create_client(url, key)
 
 
