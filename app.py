@@ -96,8 +96,7 @@ else:
             st.success("📡 Live Cloud Data Pipeline Active — Remote Database Synchronized")
             st.write("Review aggregated off-market profiles below. Click **'Analyze Deal Structure'** to review masked indicators.")
             
-            # Loop through records to build interactive deals panel
-           # Loop through individual database entries to render custom property slots
+            # Loop through individual database entries to render custom property slots
             for index, row in df.iterrows():
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([3, 1, 1])
@@ -109,7 +108,6 @@ else:
                         
                     with c2:
                         st.markdown("<br>", unsafe_allow_html=True)
-                        # We change this to an expander toggle so it drops open right below the card!
                         analyze_deal = st.checkbox("🔍 Analyze Deal Structure", key=f"analysis_{index}")
                         
                     with c3:
@@ -121,27 +119,36 @@ else:
                         st.markdown("---")
                         st.markdown("### 📊 Proprietary Underwriting Data Matrix")
                         
-                        # Split analytics panel into 2 clean columns
+                        # 🖼️ 1. RENDER LIVE IMAGE FROM SUPABASE
+                        # Checks if image link exists and isn't a string representation of NULL
+                        img_val = row.get('image_url')
+                        if img_val and str(img_val).strip() != 'None' and str(img_val).strip() != 'NULL':
+                            st.image(img_val, caption=f"Asset Gallery Showcase: {row.get('title')}", use_container_width=True)
+                        
+                        # Split details panel into two scannable columns
                         left_panel, right_panel = st.columns(2)
                         
                         with left_panel:
                             st.markdown("#### **📍 Asset Overview & Signals**")
                             st.info(f"**Target Sourcing Keywords Detected:** {row.get('keywords_found', 'N/A')}")
-                            st.write(f"This asset was flagged by the background scraper tracking raw market anomalies in Liverpool and the Wirral. It matches structural distress or motivated vendor criteria.")
+                            
+                            # 📝 2. RENDER LIVE DESCRIPTION TEXT FROM SUPABASE
+                            desc_val = row.get('description')
+                            if desc_val and str(desc_val).strip() != 'None' and str(desc_val).strip() != 'NULL':
+                                st.success(f"📋 **Underwriting Evaluation Summary:**\n\n{desc_val}")
+                            else:
+                                st.write("_This asset was flagged by the background scraper tracking raw market anomalies in Liverpool and the Wirral. Custom underwriting overview notes are currently pending upload for this specific record._")
                         
                         with right_panel:
                             st.markdown("#### **🧮 Live BRRRR Deal Calculator**")
-                            # Pull price numeric value safely (stripping £ or commas if they exist)
                             try:
                                 raw_price = float(''.join(c for c in str(row.get('price', '0')) if c.isdigit()))
                             except ValueError:
                                 raw_price = 100000.0
                                 
-                            # Interactive calculator widgets specific to this property
                             estimated_rehab = st.number_input("Estimated Rehab/Renovation (£)", min_value=0, value=25000, step=2500, key=f"rehab_{index}")
                             projected_rent = st.number_input("Projected Monthly Rent (£)", min_value=0, value=850, step=50, key=f"rent_{index}")
                             
-                            # Simple dynamic calculations
                             total_capital_in = raw_price + estimated_rehab
                             annual_gross_yield = (projected_rent * 12) / total_capital_in if total_capital_in > 0 else 0
                             
@@ -155,7 +162,6 @@ else:
                             st.success(f"💳 Initializing secure checkout sequence for Sourcing Premium...")
                             st.markdown("### 🔑 Sourcing Verification Unlocked")
                             st.write(f"**Direct Secure Vendor Lead URL:**")
-                            # Render a clean, safe clickable button that never breaks strings
                             st.link_button("🌐 Open Source Listing Link", row.get('link', '#'), type="primary", use_container_width=True)
                             
         else:
