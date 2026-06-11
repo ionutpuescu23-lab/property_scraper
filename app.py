@@ -1,14 +1,44 @@
 import os
 import streamlit as st
-import pandas as pd
+
 from supabase import create_client
+import pandas as pd
 
-# 1. Route credentials directly from your saved advanced cloud secrets vault
-url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-key = st.secrets.get("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY")
+# 1. Page Configuration
+st.set_page_config(page_title="AlphaDeals | Premium Investor Portal", layout="wide")
 
-# 2. Fire up the client
-supabase = create_client(url, key)
+# 2. Initialize Persistent Session States
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+# 3. Pull target keys from secrets vault
+SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY")
+ADMIN_USER = st.secrets.get("ADMIN_USER")
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
+
+# 4. SIDEBAR SYSTEM (This creates your variables first!)
+st.sidebar.header("🔒 Member Authentication")
+username = st.sidebar.text_input("Username", key="login_user")
+access_key = st.sidebar.text_input("Access Key", type="password", key="login_pass")
+
+# 5. VERIFICATION LOGIC (Now it knows what username and access_key mean!)
+if st.sidebar.button("Verify Credentials") or st.session_state["authenticated"]:
+    if username == ADMIN_USER and access_key == ADMIN_PASSWORD:
+        st.session_state["authenticated"] = True
+        st.success("🎉 Access Granted! Loading pipeline...")
+        
+        # Initialize Supabase inside the access wall
+        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        
+        # ----------------------------------------------------
+        # YOUR DATABASE TABLES & DATA LOADING LOGIC GOES HERE
+        # ----------------------------------------------------
+        df = supabase.table("distressed_properties").select("*").execute()
+        st.write("Displaying distressed property deals data stream...")
+
+    else:
+        st.error("❌ Invalid Credentials. Security barrier active.")
 
 
 # 1. Page Configuration
