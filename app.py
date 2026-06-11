@@ -1,16 +1,11 @@
 import streamlit as st
-import pandas as pd
-import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase import create_client
 
-# Load hidden vault variables
-load_dotenv()
+# Streamlit looks at your local .env locally, and its secure Cloud Vault in production!
+url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
+key = st.secrets.get("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
-# Connect to your cloud backend
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_ANON_KEY")
-supabase: Client = create_client(supabase_url, supabase_key)
+supabase = create_client(url, key)
 
 
 # 1. Page Configuration
