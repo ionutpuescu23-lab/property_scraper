@@ -1,75 +1,41 @@
 import os
-import streamlit as st
-
-from supabase import create_client
 import pandas as pd
+import streamlit as st
+from supabase import create_client
 
-# 1. Page Configuration
+# 1. Page Configuration (Must only be called ONCE at the absolute top)
 st.set_page_config(page_title="AlphaDeals | Premium Investor Portal", layout="wide")
 
-# 2. Initialize Persistent Session States
+# 2. Initialize Persistent Session State for Login Flow
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-# 3. Pull target keys from secrets vault
+# 3. Pull Target Keys Directly from the Cloud Secrets Vault
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY")
 ADMIN_USER = st.secrets.get("ADMIN_USER")
 ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
 
-# 4. SIDEBAR SYSTEM (This creates your variables first!)
-st.sidebar.header("🔒 Member Authentication")
-username = st.sidebar.text_input("Username", key="login_user")
-access_key = st.sidebar.text_input("Access Key", type="password", key="login_pass")
-
-# 5. VERIFICATION LOGIC (Now it knows what username and access_key mean!)
-if st.sidebar.button("Verify Credentials") or st.session_state["authenticated"]:
-    if username == ADMIN_USER and access_key == ADMIN_PASSWORD:
-        st.session_state["authenticated"] = True
-        st.success("🎉 Access Granted! Loading pipeline...")
-        
-        # Initialize Supabase inside the access wall
-        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        
-        # ----------------------------------------------------
-        # YOUR DATABASE TABLES & DATA LOADING LOGIC GOES HERE
-        # ----------------------------------------------------
-        
-        st.write("Displaying distressed property deals data stream...")
-
-
-    else:
-        st.error("❌ Invalid Credentials. Security barrier active.")
-
-
-# 1. Page Configuration
-st.set_page_config(page_title="AlphaDeals | Premium Investor Portal", layout="wide")
-
-# 2. Initialize Persistent Session States for Login Flow
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-
-# ──── SIDEBAR SYSTEM ────
+# 4. SIDEBAR SYSTEM
 st.sidebar.header("🔐 Member Authentication")
 
-if not st.session_state["logged_in"]:
+if not st.session_state["authenticated"]:
     # Display secure form inputs if unauthenticated
     st.sidebar.subheader("Login to Access Pipeline")
-    user_input = st.sidebar.text_input("Username", placeholder="e.g. investor_alpha")
-    pass_input = st.sidebar.text_input("Access Key", type="password", placeholder="••••••••")
+    user_input = st.sidebar.text_input("Username", placeholder="e.g. investor_alpha", key="login_user")
+    pass_input = st.sidebar.text_input("Access Key", type="password", placeholder="••••••••", key="login_pass")
     
     if st.sidebar.button("Verify Credentials", type="primary"):
-
-        # Pull the safe values from your background memory environment
-        if user_input == os.getenv("PORTAL_USERNAME") and pass_input == os.getenv("PORTAL_ACCESS_KEY"):
-            st.session_state["logged_in"] = True
+        # Explicit comparison against your production TOML secrets
+        if user_input.strip() == ADMIN_USER and pass_input.strip() == ADMIN_PASSWORD:
+            st.session_state["authenticated"] = True
             st.sidebar.success("✅ Access Granted! Loading secure arrays...")
             st.rerun() # Refresh app to render the locked pipeline
         else:
             st.sidebar.error("❌ Invalid Credentials. Security barrier active.")
 else:
     # Display profile info and logout button if authenticated
-    st.sidebar.success("🔒 Secured Session Active")
+    st.sidebar.success("FT-Secure Session Active")
     st.sidebar.markdown("**Current Account:** `Premium Tier Investor`")
     
     st.sidebar.markdown("---")
@@ -77,12 +43,12 @@ else:
     fee_setting = st.sidebar.slider("Sourcing Unlock Fee (£)", min_value=500, max_value=3000, value=1500, step=250)
     
     if st.sidebar.button("Log Out", type="secondary"):
-        st.session_state["logged_in"] = False
+        st.session_state["authenticated"] = False
         st.rerun()
 
 
-# ──── MAIN PLATFORM INTERFACE ────
-if not st.session_state["logged_in"]:
+# 5. MAIN PLATFORM INTERFACE
+if not st.session_state["authenticated"]:
     # PUBLIC PAYWALL SKELETON (What non-members see)
     st.markdown("""
         <div style='background-color:#0F172A; padding:40px; border-radius:12px; border: 1px solid #1E293B; text-align:center; margin-top:50px;'>
@@ -96,7 +62,7 @@ if not st.session_state["logged_in"]:
     """, unsafe_allow_html=True)
 
 else:
-    # PRIVATE MEMBER INTERFACE (What opens when logged_in is True)
+    # PRIVATE MEMBER INTERFACE (Opens when authenticated is True)
     st.markdown("""
         <div style='background-color:#1E293B; padding:20px; border-radius:10px; margin-bottom:25px;'>
             <h1 style='color:white; margin:0; font-family:sans-serif;'>🌐 AlphaDeals Premium Investor Portal</h1>
@@ -106,19 +72,21 @@ else:
 
     # 📡 LIVE CLOUD DATA STREAM INTEGRATION
     try:
-        # Fetch the harvested records streaming directly from your Supabase backend
-        # Correct line matching your package version
+        # Initialize Supabase dynamically using safe vault keys
+        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        
+        # Fetch records from your live backend table
         response = supabase.table("property_deals").select("*").order("created_at", desc=True).execute()
         
-        # Parse the response data block
+        # Parse into a clean dataframe
         df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
         
         if not df.empty:
             total_found = len(df)
-            # Checked against the lowercased column names from your database schema
-            reduced_count = len(df[df['reduced'] == 'Yes'])
+            # Checked against lowercased database schema columns
+            reduced_count = len(df[df['reduced'] == 'Yes']) if 'reduced' in df.columns else 0
             
-            # Render your high-level pipeline data KPI cards
+            # Render live pipeline KPI widgets
             col1, col2, col3 = st.columns(3)
             col1.metric("Active Sourced Assets", total_found)
             col2.metric("Price Reduced Opportunities", reduced_count, delta=f"{int((reduced_count/total_found)*100)}%" if total_found > 0 else "0%")
@@ -128,15 +96,15 @@ else:
             st.success("📡 Live Cloud Data Pipeline Active — Remote Database Synchronized")
             st.write("Review aggregated off-market profiles below. Click **'Analyze Deal Structure'** to review masked indicators.")
             
-            # Loop through individual database entries to render custom property slots
+            # Loop through records to build interactive deals panel
             for index, row in df.iterrows():
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([3, 1, 1])
                     
                     with c1:
-                        st.subheader(f"🏠 {row['title']}")
-                        st.markdown(f"**Target Signals Captured:** :red[{row['keywords_found']}]")
-                        st.text(f"Price: {row['price']} | Reduced Status: {row['reduced']}")
+                        st.subheader(f"🏠 {row.get('title', 'Unknown Sourced Asset')}")
+                        st.markdown(f"**Target Signals Captured:** :red[{row.get('keywords_found', 'N/A')}]")
+                        st.text(f"Price: {row.get('price', 'N/A')} | Reduced Status: {row.get('reduced', 'N/A')}")
                         
                     with c2:
                         st.markdown("<br>", unsafe_allow_html=True)
@@ -146,10 +114,10 @@ else:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button(f"🔒 Unlock for £{fee_setting}", key=f"pay_{index}", type="primary"):
                             st.success(f"💳 Initializing secure checkout sequence...")
-                            st.info(f"**Verified Asset Link Ready:** {row['link']}")
+                            st.info(f"**Verified Asset Link Ready:** {row.get('link', '#')}")
                             
         else:
-            st.warning("⚠️ Cloud connection is active, but your database is currently blank. Execute your scraper pipeline to stream rows here!")
+            st.warning("⚠️ Cloud connection is active, but your database is currently blank. Execute your local loader pipeline to stream records here!")
             
     except Exception as e:
         st.error(f"❌ Core Database Stream Failure: Unable to handshake with cloud repository. Details: {e}")
