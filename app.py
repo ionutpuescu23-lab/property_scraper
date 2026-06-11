@@ -2,7 +2,9 @@ import os
 import pandas as pd
 import streamlit as st
 from supabase import create_client
-
+import requests
+from PIL import Image
+from io import BytesIO
 # 1. Page Configuration (Must only be called ONCE at the absolute top)
 st.set_page_config(page_title="AlphaDeals | Premium Investor Portal", layout="wide")
 
@@ -125,7 +127,7 @@ else:
                     st.markdown("---")
                     st.markdown("### 📊 Proprietary Underwriting Data Matrix")
                     
-                    # 🖼️ RENDER LIVE IMAGE FROM SUPABASE INSIDE THE CARD
+                   # 🖼️ RENDER LIVE IMAGE FROM SUPABASE INSIDE THE CARD
                     img_val = row.get('image_url')
                     if img_val and str(img_val).strip() != 'None' and str(img_val).strip() != 'NULL':
                         st.image(str(img_val).strip(), caption=f"Asset Gallery Showcase: {row.get('title')}", use_container_width=True)
