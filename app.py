@@ -127,11 +127,21 @@ else:
                     st.markdown("---")
                     st.markdown("### 📊 Proprietary Underwriting Data Matrix")
                     
-                   # 🖼️ RENDER LIVE IMAGE FROM SUPABASE INSIDE THE CARD
+                  # 🖼️ RENDER LIVE IMAGE FROM SUPABASE INSIDE THE CARD
                     img_val = row.get('image_url')
                     if img_val and str(img_val).strip() != 'None' and str(img_val).strip() != 'NULL':
-                        st.image(str(img_val).strip(), caption=f"Asset Gallery Showcase: {row.get('title')}", use_container_width=True)
-                    
+                        # Clean the URL string to remove any invisible whitespace characters
+                        clean_url = str(img_val).strip()
+                        
+                        try:
+                            # Explicitly verify it's a URL to prevent Streamlit from thinking it's a local file
+                            if clean_url.startswith("http://") or clean_url.startswith("https://"):
+                                st.image(clean_url, caption=f"Asset Gallery Showcase: {row.get('title')}", use_container_width=True)
+                            else:
+                                st.write("📷 _Invalid image URL format stored in database._")
+                        except Exception as img_err:
+                            # Catching MediaFileStorageError so the rest of your app remains perfectly functional!
+                            st.write("📷 _Image asset temporarily unavailable or link format invalid._")
                     # Split details panel into two scannable columns
                     left_panel, right_panel = st.columns(2)
                     
