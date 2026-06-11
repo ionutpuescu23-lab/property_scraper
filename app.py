@@ -1,10 +1,16 @@
 import streamlit as st
 import pandas as pd
 import os
-from dotenv import load_dotenv, load_load_env # Import the env loader
+from dotenv import load_dotenv
+from supabase import create_client, Client
 
-# Load your hidden vault values into Python's memory
+# Load hidden vault variables
 load_dotenv()
+
+# Connect to your cloud backend
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_ANON_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
 
 
 # 1. Page Configuration
@@ -24,7 +30,7 @@ if not st.session_state["logged_in"]:
     pass_input = st.sidebar.text_input("Access Key", type="password", placeholder="••••••••")
     
     if st.sidebar.button("Verify Credentials", type="primary"):
-        # DEMO CREDENTIALS: You can change these to whatever you like
+
         # Pull the safe values from your background memory environment
         if user_input == os.getenv("PORTAL_USERNAME") and pass_input == os.getenv("PORTAL_ACCESS_KEY"):
             st.session_state["logged_in"] = True
@@ -69,30 +75,39 @@ else:
         </div>
     """, unsafe_allow_html=True)
 
-    # Load the scraped data pipeline
+    # 📡 LIVE CLOUD DATA STREAM INTEGRATION
     try:
-        df = pd.read_csv("distressed_property_deals.csv")
+        # Fetch the harvested records streaming directly from your Supabase backend
+        # Correct line matching your package version
+        response = supabase.table("property_deals").select("*").order("created_at", desc=True).execute()
+        
+        # Parse the response data block
+        df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
         
         if not df.empty:
             total_found = len(df)
-            reduced_count = len(df[df['Reduced'] == 'Yes'])
+            # Checked against the lowercased column names from your database schema
+            reduced_count = len(df[df['reduced'] == 'Yes'])
             
+            # Render your high-level pipeline data KPI cards
             col1, col2, col3 = st.columns(3)
             col1.metric("Active Sourced Assets", total_found)
             col2.metric("Price Reduced Opportunities", reduced_count, delta=f"{int((reduced_count/total_found)*100)}%" if total_found > 0 else "0%")
             col3.metric("Target Sourcing Premium", f"£{fee_setting:,}")
             
             st.markdown("### 📋 Active Investment Deal Pipeline")
+            st.success("📡 Live Cloud Data Pipeline Active — Remote Database Synchronized")
             st.write("Review aggregated off-market profiles below. Click **'Analyze Deal Structure'** to review masked indicators.")
             
+            # Loop through individual database entries to render custom property slots
             for index, row in df.iterrows():
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([3, 1, 1])
                     
                     with c1:
-                        st.subheader(f"🏠 {row['Title']}")
-                        st.markdown(f"**Target Signals Captured:** :red[{row['Keywords Found']}]")
-                        st.text(f"Price: {row['Price']} | Reduced Status: {row['Reduced']}")
+                        st.subheader(f"🏠 {row['title']}")
+                        st.markdown(f"**Target Signals Captured:** :red[{row['keywords_found']}]")
+                        st.text(f"Price: {row['price']} | Reduced Status: {row['reduced']}")
                         
                     with c2:
                         st.markdown("<br>", unsafe_allow_html=True)
@@ -102,9 +117,10 @@ else:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button(f"🔒 Unlock for £{fee_setting}", key=f"pay_{index}", type="primary"):
                             st.success(f"💳 Initializing secure checkout sequence...")
-                            st.info(f"**Verified Asset Link Ready:** {row['Link']}")
+                            st.info(f"**Verified Asset Link Ready:** {row['link']}")
                             
         else:
-            st.warning("⚠️ Database is active, but no records currently match inside 'distressed_property_deals.csv'.")
-    except FileNotFoundError:
-        st.error("❌ Source Pipeline Missing: 'distressed_property_deals.csv' not found. Run 'python scraper.py' first.")
+            st.warning("⚠️ Cloud connection is active, but your database is currently blank. Execute your scraper pipeline to stream rows here!")
+            
+    except Exception as e:
+        st.error(f"❌ Core Database Stream Failure: Unable to handshake with cloud repository. Details: {e}")

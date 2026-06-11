@@ -1,9 +1,12 @@
-import time
+import requests
 import re
-import pandas as pd
+import os
+import time
+from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
-# Import our new stealth evasion engine
-import playwright_stealth.stealth
+
+# Load your hidden cloud keys into memory
+load_dotenv()
 
 def scrape_investor_deals(search_url, max_listings_to_check=10):
     listing_links = []
@@ -12,24 +15,32 @@ def scrape_investor_deals(search_url, max_listings_to_check=10):
     with sync_playwright() as p:
         print("🚀 Step 1: Deploying Stealth Crawler to harvest property links...")
         
-        # Launch Chrome with arguments that bypass bot flags
-       # --- NEW PERSISTENT SHIELD REPLACEMENT ---
-        import os
-        user_data_dir = os.path.join(os.getcwd(), "chrome_profile")
+        # Define a premium, clean human identity matrix
+        human_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         
-        print("Launching secure human-simulated profile...")
-        context = p.chromium.launch_persistent_context(
-            user_data_dir,
+        # Launch a single, independent browser engine instance
+        browser = p.chromium.launch(
             headless=False,
-            no_viewport=True,
-            args=["--disable-blink-features=AutomationControlled"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--start-maximized"
+            ]
         )
-        # --- END OF REPLACEMENT ---
+        
+        # Spin up a completely fresh, isolated in-memory user context profile
+        context = browser.new_context(
+            user_agent=human_user_agent,
+            no_viewport=True
+        )
         
         page = context.new_page()
         
-        # ACTIVATE SHIELD: Apply stealth injections to the page canvas
-        playwright_stealth.stealth
+        # NATIVE STEALTH SHIELD: Erase automated testing fingerprints instantly
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)   
         
         # Open main search results page with human navigation timing
         page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
@@ -100,29 +111,52 @@ def scrape_investor_deals(search_url, max_listings_to_check=10):
                     
                     print(f"   🎉 Investor Deal Found! Price: {price_found} | Signals: {', '.join(matched_keywords)}")
                     
-                    deals.append({
-                        "Title": title_found,
-                        "Price": price_found,
-                        "Link": link,
-                        "Reduced": "Yes" if "reduced" in page_text_lower else "No",
-                        "Keywords Found": ", ".join(matched_keywords)
-                    })
-            except Exception as e:
-                    print(f"   ⚠️ Could not load listing details page: {e}")
-                    continue
+                    # Map boolean status cleanly to your database text settings ("Yes" / "No")
+                    is_reduced = "Yes" if "reduced" in page_text_lower else "No"
+
+                   # Formulate payload exactly matching your FastAPI Pydantic schema rules
+                    payload = {
+                        "title": title_found,
+                        "price": price_found,
+                        "link": link,
+                        "reduced": "reduced" in page_text_lower,  # Sends pure True or False boolean natively
+                        "keywords_found": ", ".join(matched_keywords),
+                        "source_type": "on_market"  # Since we're scraping an on-market portal
+                    }
+                    payload = {
+                        "title": "Direct Vendor Lead - 3 Bed Terrace",
+                        "price": "£120,000",
+                        "link": "https://puescupropertiesltd.com/internal-id-102",
+                        "reduced": False,
+                        "keywords_found": "motivated seller",
+                        "source_type": "off_market"  # This flags the direct-to-vendor pitch!
+                    }
+                    # Direct data stream to your centralized FastAPI backend endpoint
+                    backend_url = "http://127.0.0.1:8000/api/v1/deals/ingest"
+                    
+                    try:
+                        api_response = requests.post(backend_url, json=payload)
+                        if api_response.status_code == 200:
+                            print("   📡 Asset routed through FastAPI core and synchronized to the cloud safely.")
+                        else:
+                            print(f"   ⚠️ Backend validation rejected the deal: {api_response.text}")
+                    except Exception as api_err:
+                        print(f"   ⚠️ Could not establish connection to the FastAPI server: {api_err}")
+            
+            except Exception as scrape_err:
+                print(f"   ⚠️ Failed to scrape listing: {scrape_err}")
                 
+        # Gracefully disconnect core automated engine pieces
+        page.close()
         context.close()
+        browser.close()
+        
     return deals
+    
 
 if __name__ == "__main__":
-    TARGET_SEARCH = "https://www.zoopla.co.uk/for-sale/property/liverpool/?page_size=25&sort_by=most_reduced"
+    TARGET_SEARCH = "https://www.zoopla.co.uk/for-sale/property/liverpool/?page_size=25&sort_by=most_reduced&pn=1"
     
-    verified_deals = scrape_investor_deals(TARGET_SEARCH, max_listings_to_check=10)
-    
-    if verified_deals:
-        df = pd.DataFrame(verified_deals)
-        df.to_csv("distressed_property_deals.csv", index=False)
-        print(f"\n📊 Strategic analysis complete! {len(verified_deals)} clean deals saved.")
-        print(df)
-    else:
-        print("\nAnalysis cycle complete. No target keywords identified inside property description deep layers.")
+    print("\n⚡ Starting Sourcing Pipeline Loop ⚡")
+    scrape_investor_deals(TARGET_SEARCH, max_listings_to_check=5)
+    print("\n🎉 Cloud Harvest Cycle Complete!")

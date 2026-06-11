@@ -1,11 +1,7 @@
-# Block local automated browser sessions
 chrome_profile/
+chrome_profile_old/
 __pycache__/
-
-# Block local data files
-distressed_property_deals.csv
-
-# Block environment variables and system files
 .env
-.DS_Store
-Thumbs.db
+*.env
+*.log
+distressed_property_deals.csv
