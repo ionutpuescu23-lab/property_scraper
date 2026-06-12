@@ -123,12 +123,11 @@ async def ingest_property_deal(deal: DealSchema):
         deal_data = deal.model_dump()
         
         # 1. Fire data packet directly to your remote Supabase table instance
+
         response = supabase.table("property_deals").insert(deal_data).execute()
-        
-        # 2. Trigger your automated communications module asynchronously
-        await send_automated_outreach(deal_data)
-        
-        return {"status": "success", "message": "Deal ingested and outreach sequence executed.", "data": response.data}
+        return {"status": "success", "message": "Deal ingested and outreach sequence "
+        "executed.", "data": response.data}
+    
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Core database processing error: {str(e)}")
