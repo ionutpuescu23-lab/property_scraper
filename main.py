@@ -126,7 +126,7 @@ async def ingest_property_deal(deal: DealSchema):
         response = supabase.table("property_deals").insert(deal_data).execute()
         
         # 2. Trigger your automated communications module asynchronously
-        send_automated_outreach(deal_data)
+        await send_automated_outreach(deal_data)
         
         return {"status": "success", "message": "Deal ingested and outreach sequence executed.", "data": response.data}
         
