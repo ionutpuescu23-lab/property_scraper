@@ -1,7 +1,5 @@
-chrome_profile/
-chrome_profile_old/
+.streamlit/secrets.toml
+chrome_rightmove_*
 __pycache__/
+*.pyc
 .env
-*.env
-*.log
-distressed_property_deals.csv

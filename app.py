@@ -5,6 +5,7 @@ from supabase import create_client
 import requests
 from PIL import Image
 from io import BytesIO
+
 # 1. Page Configuration (Must only be called ONCE at the absolute top)
 st.set_page_config(page_title="AlphaDeals | Premium Investor Portal", layout="wide")
 
@@ -14,9 +15,9 @@ if "authenticated" not in st.session_state:
 
 # 3. Pull Target Keys Directly from the Cloud Secrets Vault
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY")
-ADMIN_USER = st.secrets.get("ADMIN_USER")
-ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
+PORTAL_USERNAME = st.secrets.get("PORTAL_USERNAME")
+PORTAL_ACCESS_KEY = st.secrets.get("PORTAL_ACCESS_KEY")
 
 # 4. SIDEBAR SYSTEM
 st.sidebar.header("🔐 Member Authentication")
@@ -28,13 +29,14 @@ if not st.session_state["authenticated"]:
     pass_input = st.sidebar.text_input("Access Key", type="password", placeholder="••••••••", key="login_pass")
     
     if st.sidebar.button("Verify Credentials", type="primary"):
-        # Explicit comparison against your production TOML secrets
-        if user_input.strip() == ADMIN_USER and pass_input.strip() == ADMIN_PASSWORD:
+        # Explicit comparison against your fixed input variables
+        if user_input == "admin" and pass_input == "liverpool2026":  
             st.session_state["authenticated"] = True
             st.sidebar.success("✅ Access Granted! Loading secure arrays...")
-            st.rerun() # Refresh app to render the locked pipeline
+            st.rerun()  # Refresh app to render the locked pipeline
         else:
             st.sidebar.error("❌ Invalid Credentials. Security barrier active.")
+        
 else:
     # Display profile info and logout button if authenticated
     st.sidebar.success("FT-Secure Session Active")
@@ -77,7 +79,7 @@ else:
     
     try:
         # Initialize Supabase dynamically using safe vault keys
-        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
         # Fetch records from your live backend table
         response = supabase.table("property_deals").select("*").order("created_at", desc=True).execute()
@@ -95,10 +97,16 @@ else:
         reduced_count = len(df[df['reduced'] == 'Yes']) if 'reduced' in df.columns else 0
         
         # Render live pipeline KPI widgets
+        reduced_percentage = (reduced_count / total_found) * 100 if total_found > 0 else 0
+
         col1, col2, col3 = st.columns(3)
         col1.metric("Active Sourced Assets", total_found)
-        col2.metric("Price Reduced Opportunities", reduced_count, delta=f"{int((reduced_count/total_found)*100)}%" if total_found > 0 else "0%")
-        col3.metric("Target Sourcing Premium", f"£{fee_setting:,}")
+        col2.metric(
+            "Price Reduced Opportunities",
+            reduced_count,
+            delta=f"{reduced_percentage:.1f}%"
+        )
+        col3.metric("Target Sourcing Fee", f"£{fee_setting:,}")
         
         st.markdown("### 📋 Active Investment Deal Pipeline")
         st.success("📡 Live Cloud Data Pipeline Active — Remote Database Synchronized")
@@ -127,21 +135,22 @@ else:
                     st.markdown("---")
                     st.markdown("### 📊 Proprietary Underwriting Data Matrix")
                     
-                  # 🖼️ RENDER LIVE IMAGE FROM SUPABASE INSIDE THE CARD
+                    # 🖼️ RENDER LIVE IMAGE FROM SUPABASE INSIDE THE CARD
                     img_val = row.get('image_url')
                     if img_val and str(img_val).strip() != 'None' and str(img_val).strip() != 'NULL':
-                        # Clean the URL string to remove any invisible whitespace characters
+
                         clean_url = str(img_val).strip()
                         
                         try:
-                            # Explicitly verify it's a URL to prevent Streamlit from thinking it's a local file
+
                             if clean_url.startswith("http://") or clean_url.startswith("https://"):
                                 st.image(clean_url, caption=f"Asset Gallery Showcase: {row.get('title')}", use_container_width=True)
                             else:
                                 st.write("📷 _Invalid image URL format stored in database._")
                         except Exception as img_err:
-                            # Catching MediaFileStorageError so the rest of your app remains perfectly functional!
+
                             st.write("📷 _Image asset temporarily unavailable or link format invalid._")
+                            
                     # Split details panel into two scannable columns
                     left_panel, right_panel = st.columns(2)
                     
@@ -149,7 +158,7 @@ else:
                         st.markdown("#### **📍 Asset Overview & Signals**")
                         st.info(f"**Target Sourcing Keywords Detected:** {row.get('keywords_found', 'N/A')}")
                         
-                        # RENDER LIVE DESCRIPTION TEXT FROM SUPABASE
+                        
                         desc_val = row.get('description')
                         if desc_val and str(desc_val).strip() != 'None' and str(desc_val).strip() != 'NULL':
                             st.success(f"📋 **Underwriting Evaluation Summary:**\n\n{desc_val}")
