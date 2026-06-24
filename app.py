@@ -50,7 +50,7 @@ else:
 
     fee_setting = st.sidebar.slider(
         "Sourcing Unlock Fee (£)",
-        min_value=500,
+        min_value=700,
         max_value=3000,
         value=1500,
         step=250

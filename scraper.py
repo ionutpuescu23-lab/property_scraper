@@ -36,7 +36,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 # =========================
-# TARGET AREAS - UK WIDE MAX PRICE £70,000
+# TARGET AREAS - UK WIDE MAX PRICE £40,000
 # =========================
 
 
