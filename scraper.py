@@ -61,7 +61,7 @@ SEARCH_TARGETS = [
         "url": (
             "https://www.rightmove.co.uk/property-for-sale/find.html"
             f"?locationIdentifier={region_code}"
-            "&maxPrice=70000&sortType=6&includeSSTC=false"
+            "&maxPrice=40000&sortType=6&includeSSTC=false"
         ),
     }
     for area, region_code in RIGHTMOVE_REGIONS.items()
@@ -261,7 +261,7 @@ def calculate_deal_score(matched_keywords: list[str]) -> int:
 
 
 
-def is_price_under_threshold(price_text: str, max_threshold: int = 70000) -> bool:
+def is_price_under_threshold(price_text: str, max_threshold: int = 40000) -> bool:
 
     try:
         clean_numeric_string = re.sub(r"[^\d]", "", price_text)
@@ -376,8 +376,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
 
 
                     price = extract_price(clean_segments)
-                    if not is_price_under_threshold(price, max_threshold=70000):
-                        print(f"      Skipped: Price {price} exceeds £70k allocation limit.")
+                    if not is_price_under_threshold(price, max_threshold=40000):
+                        print(f"      Skipped: Price {price} exceeds £40k allocation limit.")
                         continue
 
                     image_url = extract_image(page)
