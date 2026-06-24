@@ -1,12 +1,16 @@
+import os
 import re
 import time
 from pathlib import Path
 import tomllib
-from urllib.parse import quote_plus
 
+
+from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from supabase import create_client, Client
 
+# Automatically load local .env definitions if present
+load_dotenv()
 
 # =========================
 # SUPABASE SETUP
@@ -14,23 +18,28 @@ from supabase import create_client, Client
 
 secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
 
-with open(secrets_path, "rb") as f:
-    secrets = tomllib.load(f)
+secrets = {}
+if secrets_path.exists():
+    with open(secrets_path, "rb") as f:
+        try:
+            secrets = tomllib.load(f)
+        except Exception:
+            pass
 
-SUPABASE_URL = secrets.get("SUPABASE_URL")
-SUPABASE_KEY = secrets.get("SUPABASE_KEY")
+SUPABASE_URL = secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY in .streamlit/secrets.toml")
+    raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY configuration credentials.")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 # =========================
-# TARGET AREAS - UK WIDE (MAX PRICE £70,000)
+# TARGET AREAS - UK WIDE MAX PRICE £70,000
 # =========================
 
-# Fixed: Mapped exact internal Rightmove location identifier codes
+
 RIGHTMOVE_REGIONS = {
     "Liverpool": "REGION%5E813",
     "Wirral": "REGION%5E1443",
@@ -41,91 +50,58 @@ RIGHTMOVE_REGIONS = {
     "Nottingham": "REGION%5E1019",
     "Newcastle": "REGION%5E984",
     "Cardiff": "REGION%5E271",
-    "Glasgow": "REGION%5E550"
+    "Glasgow": "REGION%5E550",
 }
 
-SEARCH_TARGETS = []
-
-# Build Rightmove Targets with maxPrice=70000
-for area, region_code in RIGHTMOVE_REGIONS.items():
-    SEARCH_TARGETS.append({
+SEARCH_TARGETS = [
+    {
         "portal": "Rightmove",
         "region": "United Kingdom",
         "area": area,
-        "url": f"https://www.rightmove.co.uk/property-for-sale/find.html?locationIdentifier={region_code}&maxPrice=70000&sortType=6&includeSSTC=false"
-    })
-
-TARGET_SEARCHES = {
-    "Liverpool": {
-        "rightmove": "https://www.rightmove.co.uk/property-for-sale/Liverpool.html",
-        "onthemarket": "https://www.onthemarket.com/for-sale/property/liverpool/",
-        "zoopla": "https://www.zoopla.co.uk/for-sale/property/liverpool/"
-    },
-
-    "Wirral": {
-        "rightmove": "https://www.rightmove.co.uk/property-for-sale/Wirral.html",
-        "onthemarket": "https://www.onthemarket.com/for-sale/property/wirral/",
-        "zoopla": "https://www.zoopla.co.uk/for-sale/property/wirral/"
-    },
-
-    "Manchester": {
-        "rightmove": "https://www.rightmove.co.uk/property-for-sale/Manchester.html",
-        "onthemarket": "https://www.onthemarket.com/for-sale/property/manchester/",
-        "zoopla": "https://www.zoopla.co.uk/for-sale/property/manchester/"
-    },
-
-    "Leeds": {
-        "rightmove": "https://www.rightmove.co.uk/property-for-sale/Leeds.html",
-        "onthemarket": "https://www.onthemarket.com/for-sale/property/leeds/",
-        "zoopla": "https://www.zoopla.co.uk/for-sale/property/leeds/"
-    },
-
-    "Sheffield": {
-        "rightmove": "https://www.rightmove.co.uk/property-for-sale/Sheffield.html",
-        "onthemarket": "https://www.onthemarket.com/for-sale/property/sheffield/",
-        "zoopla": "https://www.zoopla.co.uk/for-sale/property/sheffield/"
+        "url": (
+            "https://www.rightmove.co.uk/property-for-sale/find.html"
+            f"?locationIdentifier={region_code}"
+            "&maxPrice=70000&sortType=6&includeSSTC=false"
+        ),
     }
-}
-AUCTION_SOURCES = [
-    "https://www.sdlauctions.co.uk",
-    "https://www.auctionhouse.co.uk",
-    "https://www.pattinson.co.uk/auctions",
-    "https://www.barnardmarcusauctions.co.uk"
+    for area, region_code in RIGHTMOVE_REGIONS.items()
 ]
 
 DEAL_KEYWORDS = [
-    "auction",
-    "renovation",
-    "refurbishment",
-    "refurb",
-    "modernisation",
-    "modernization",
-    "project",
-    "yield",
-    "tenant",
-    "tenanted",
-    "reduced",
-    "price drop",
-    "investment",
-    "development",
-    "potential",
-    "cash buyers",
-    "in need of",
-    "needs work",
-    "requires work",
-    "no onward chain",
+    "auction", "renovation", "refurbishment", "refurb", "modernisation",
+    "modernization", "project", "yield", "tenant", "tenanted", "reduced",
+    "price drop", "investment", "development", "potential", "cash buyers",
+    "in need of", "needs work", "requires work", "no onward chain",
 ]
+
+COUNCIL_INFO = {
+    "Liverpool": {
+        "council_name": "Liverpool City Council",
+        "empty_home_signal": "Empty homes programme active",
+        "grant_available": "Yes",
+        "council_source_url": "https://liverpool.gov.uk/housing/report-housing-standards-and-conditions/empty-homes/",
+        "council_notes": "Council operates empty homes programme. Useful as area-level investment signal only.",
+    },    "Wirral": {
+        "council_name": "Wirral Council",
+        "empty_home_signal": "Empty property reporting active",
+        "grant_available": "Unknown",
+        "council_source_url": "https://www.wirral.gov.uk/housing/information-and-advice/empty-properties",
+        "council_notes": "Council accepts reports of empty properties. Useful as area-level investment signal only.",
+    },
+}
+
+def get_council_field(area: str, field_name: str) -> str:
+    return COUNCIL_INFO.get(area, {}).get(field_name, "")
 
 
 # =========================
 # DATABASE SAVE
 # =========================
-
-def save_deal_to_supabase(deal_data: dict):
+def save_deal_to_supabase(deal_data: dict) -> None:
     try:
         supabase.table("property_deals").upsert(
             deal_data,
-            on_conflict="link"
+            on_conflict="link",
         ).execute()
 
         print("      ✅ Saved/updated in Supabase")
@@ -137,39 +113,38 @@ def save_deal_to_supabase(deal_data: dict):
 # =========================
 # EXTRACT HELPERS
 # =========================
+def extract_links(page, portal: str) -> list[str]:
+    try:
+        # Give the links half a second to anchor securely in DOM
+        page.wait_for_timeout(500)
+        all_links = page.locator("a").evaluate_all("elements => elements.map(el => el.href)")
+    except Exception:
+        return []
 
-def extract_links(page, portal):
-    all_links = page.locator("a").evaluate_all(
-        "elements => elements.map(el => el.href)"
-    )
-
-    listing_links = []
-
+    listing_links: list[str] = []
     for href in all_links:
         if not href:
             continue
 
-        if portal == "Rightmove":
-            if "/properties/" in href and "find.html" not in href:
-                clean_link = href.split("?")[0].split("#")[0]
+        clean_link = href.split("?")[0].split("#")[0]
 
-                if clean_link not in listing_links:
-                    listing_links.append(clean_link)
-        elif portal == "OnTheMarket":
-            if "/details/" in href and "onthemarket.com" in href:
-                clean_link = href.split("?")[0].split("#")[0]
-                if clean_link not in listing_links:
-                    listing_links.append(clean_link)
+        if portal == "Rightmove" and "/properties/" in href and "find.html" not in href:
+            if clean_link not in listing_links:
+                listing_links.append(clean_link)
+
+        elif portal == "OnTheMarket" and "/details/" in href and "onthemarket.com" in href:
+            if clean_link not in listing_links:
+                listing_links.append(clean_link)
 
     return listing_links
 
 
-def extract_image(page):
+def extract_image(page) -> str:
     image_selectors = [
         "meta[property='og:image']",
         ".gallery-main-img img",
         "picture img",
-        "img"
+        "img",
     ]
 
     for selector in image_selectors:
@@ -186,19 +161,19 @@ def extract_image(page):
 
             if img_url and not img_url.startswith("data:"):
                 return img_url
-
+            
         except Exception:
             continue
 
     return "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80"
 
 
-def extract_description(page):
+def extract_description(page, clean_segments: list[str]) -> str:
     desc_selectors = [
         "[itemprop='description']",
         "section:has(h2:has-text('Description'))",
         "div:has-text('Description')",
-        "section._3OUu9W5w07n0Z-N4sM499f"
+        "section._3OUu9W5w07n0Z-N4sM499f",
     ]
 
     for selector in desc_selectors:
@@ -210,26 +185,23 @@ def extract_description(page):
 
                 if len(text) > 80:
                     return text
-
+                
         except Exception:
             continue
 
-    return ""
+    possible_descriptions = [text for text in clean_segments if len(text) > 100]
+    return possible_descriptions[0] if possible_descriptions else "Description not available."
 
 
-def extract_price(clean_segments):
+def extract_price(clean_segments: list[str]) -> str:
     text = " ".join(clean_segments)
 
     patterns = [
-    # 1. Matches "Guide Price £70,000" or "Guide Price 70000"
-    r"Guide Price\s*£?\s*[0-9,]+",
-    # 2. Matches "Offers Over £70,000" or "Offers Over 70000"
-    r"Offers Over\s*£?\s*[0-9,]+",
-    # 3. Matches explicit prices over £10k with commas (e.g., £70,000) but stops at spaces/lines
-    r"£\s?[1-9][0-9]{1,2},[0-9]{3}(?!\d)",
-    # 4. Fallback for clean flat numbers like £70000
-    r"£\s?[1-9][0-9]{3,6}(?!\d)",
-]
+        r"Guide Price\s*£?\s*[0-9,]+",
+        r"Offers Over\s*£?\s*[0-9,]+",
+        r"£\s?[1-9][0-9]{1,2},[0-9]{3}(?!\d)",
+        r"£\s?[1-9][0-9]{3,6}(?!\d)",
+    ]
 
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -239,47 +211,58 @@ def extract_price(clean_segments):
 
     return "Price not available"
 
-
-def extract_title(clean_segments, portal, area):
+def extract_title(clean_segments: list[str], portal: str, area: str) -> str:
     for segment in clean_segments:
         lower = segment.lower()
-
-        if any(word in lower for word in ["house", "terrace", "apartment", "bungalow"]):
+        if any(word in lower for word in ["house", "terrace", "bungalow"]): # removed apartment/flat
             if len(segment) < 150:
                 return segment.strip().title()
 
     return f"{area} Investment Property - {portal}"
 
 
-def calculate_deal_score(matched_keywords):
+
+def extract_postcode(text: str) -> str:
+    postcode_pattern = r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b"
+    match = re.search(postcode_pattern, text.upper())
+    return match.group(0).strip() if match else ""
+
+
+def extract_address(clean_segments: list[str], postcode: str) -> str:
+    if not postcode:
+        return ""
+
+    postcode_upper = postcode.upper().replace(" ", "")
+    for segment in clean_segments:
+        compact = segment.upper().replace(" ", "")
+        if postcode_upper in compact and len(segment) < 200:
+            return segment.strip()
+
+    return ""
+
+
+def extract_street(address: str) -> str:
+    if not address:
+        return ""
+    street = re.sub(r"^\s*\d+[A-Z]?\s+", "", address.strip(), flags=re.IGNORECASE)
+    return street
+
+
+def calculate_deal_score(matched_keywords: list[str]) -> int:
     scoring_rules = {
-        "auction": 5,
-        "renovation": 5,
-        "refurbishment": 5,
-        "refurb": 4,
-        "modernisation": 4,
-        "modernization": 4,
-        "in need of": 4,
-        "needs work": 4,
-        "requires work": 4,
-        "project": 3,
-        "yield": 3,
-        "investment": 3,
-        "development": 3,
-        "tenant": 2,
-        "tenanted": 2,
-        "reduced": 2,
-        "price drop": 2,
-        "cash buyers": 2,
-        "no onward chain": 1,
-        "potential": 1,
+        "auction": 5, "renovation": 5, "refurbishment": 5, "refurb": 4,
+        "modernisation": 4, "modernization": 4, "in need of": 4, "needs work": 4,
+        "requires work": 4, "project": 3, "yield": 3, "investment": 3,
+        "development": 3, "tenant": 2, "tenanted": 2, "reduced": 2,
+        "price drop": 2, "cash buyers": 2, "no onward chain": 1, "potential": 1,
     }
 
     return sum(scoring_rules.get(keyword, 0) for keyword in matched_keywords)
 
 
+
 def is_price_under_threshold(price_text: str, max_threshold: int = 70000) -> bool:
-    """Verifies extracted numeric contents fall cleanly below target ceiling parameters."""
+
     try:
         clean_numeric_string = re.sub(r"[^\d]", "", price_text)
         if not clean_numeric_string:
@@ -291,93 +274,13 @@ def is_price_under_threshold(price_text: str, max_threshold: int = 70000) -> boo
         return False
 
 
-# =========================
-# COUNCIL INTELLIGENCE
-# =========================
 
-COUNCIL_INFO = {
-    "Liverpool": {
-        "council_name": "Liverpool City Council",
-        "empty_home_signal": "Empty homes programme active",
-        "grant_available": "Yes",
-        "council_source_url": "https://liverpool.gov.uk/housing/report-housing-standards-and-conditions/empty-homes/",
-        "council_notes": "Council operates empty homes programme. Useful as area-level investment signal only."
-    },
-    "Wirral": {
-        "council_name": "Wirral Council",
-        "empty_home_signal": "Empty property reporting active",
-        "grant_available": "Unknown",
-        "council_source_url": "https://www.wirral.gov.uk/housing/information-and-advice/empty-properties",
-        "council_notes": "Council accepts reports of empty properties. Useful as area-level investment signal only."
-    },
-    "Manchester": {
-        "council_name": "Manchester City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Leeds": {
-        "council_name": "Leeds City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Sheffield": {
-        "council_name": "Sheffield City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Birmingham": {
-        "council_name": "Birmingham City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Nottingham": {
-        "council_name": "Nottingham City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Newcastle": {
-        "council_name": "Newcastle City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Cardiff": {
-        "council_name": "Cardiff Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-    "Glasgow": {
-        "council_name": "Glasgow City Council",
-        "empty_home_signal": "Council empty homes intelligence to verify",
-        "grant_available": "Unknown",
-        "council_source_url": "",
-        "council_notes": "Council information not yet linked. Add official source later."
-    },
-}
-
-
-def get_council_field(area, field_name):
-    return COUNCIL_INFO.get(area, {}).get(field_name, "")
 
 
 # =========================
 # MAIN SCRAPER
 # =========================
-
-def scrape_target(target, max_listings_to_check=20):
+def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
     portal = target["portal"]
     region = target["region"]
     area = target["area"]
@@ -385,9 +288,12 @@ def scrape_target(target, max_listings_to_check=20):
 
     print(f"\n🚀 Searching {portal} | {area}, {region}")
 
-    with sync_playwright() as p:
-        profile_dir = Path(__file__).parent / f"chrome_{portal.lower()}_{area.lower().replace(' ', '_')}_profile"
+    # Explicitly pull user profile folders into a hidden workspace folder
+    profile_dir = Path(__file__).parent / ".chromium_profiles" / f"{portal.lower()}_{area.lower().replace(' ', '_')}"
+    profile_dir.parent.mkdir(exist_ok=True)
 
+    with sync_playwright() as p:
+        # Launching with dedicated unique profile locations to stop file collisions
         context = p.chromium.launch_persistent_context(
             user_data_dir=str(profile_dir),
             headless=False,
@@ -397,19 +303,17 @@ def scrape_target(target, max_listings_to_check=20):
                 "Chrome/122.0.0.0 Safari/537.36"
             ),
             no_viewport=True,
-            args=[
-                "--start-maximized",
-                "--disable-infobars"
-            ]
+            args=["--start-maximized", "--disable-infobars"],
         )
-        
+
 
         page = context.pages[0] if context.pages else context.new_page()
 
         try:
             page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
-            time.sleep(5)
+            page.wait_for_timeout(4000)
 
+            # Accept Cookie walls smoothly
             try:
                 cookie = page.locator(
                     "button:has-text('Accept'), "
@@ -420,26 +324,25 @@ def scrape_target(target, max_listings_to_check=20):
 
                 if cookie.is_visible():
                     cookie.click()
-                    time.sleep(2)
-
+                    page.wait_for_timeout(1500)
             except Exception:
                 pass
 
-            # Fixed: Conditional selector wait thresholds mapped precisely per portal
+
             try:
+
                 if portal == "Rightmove":
-                    page.wait_for_selector(".propertyCard-properties", timeout=10000)
+                    page.wait_for_selector("a[href*='/properties/']", timeout=15000)
                 elif portal == "OnTheMarket":
-                    page.wait_for_selector(".property-card", timeout=10000)
+                    page.wait_for_selector("a[href*='/details/']", timeout=15000)
             except Exception:
                 pass
 
             page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
-            time.sleep(3)
+            page.wait_for_timeout(2000)
 
             listing_links = extract_links(page, portal)
-
-            print(f"   📊 Found {len(listing_links)} listing links")
+            print(f"    📊 Found {len(listing_links)} listing links")
 
             links_to_check = listing_links[:max_listings_to_check]
 
@@ -448,15 +351,9 @@ def scrape_target(target, max_listings_to_check=20):
 
                 try:
                     page.goto(link, wait_until="domcontentloaded", timeout=45000)
-                    time.sleep(3)
+                    page.wait_for_timeout(2500)
 
-                    image_url = extract_image(page)
-                    description = extract_description(page)
-
-                    content_elements = page.locator(
-                        "h1, h2, h3, p, span, li"
-                    ).all_text_contents()
-
+                    content_elements = page.locator("h1, h2, h3, p, span, li").all_text_contents()
                     clean_segments = [
                         text.strip()
                         for text in content_elements
@@ -466,33 +363,31 @@ def scrape_target(target, max_listings_to_check=20):
                     full_text = " ".join(clean_segments)
                     full_text_lower = full_text.lower()
 
-                    if not description:
-                        possible_descriptions = [
-                            text for text in clean_segments
-                            if len(text) > 100
-                        ]
+                    # 🚫 EXCLUDE FLATS AND APARTMENTS (Enhanced)
+                    excluded_words = ["flat", "apartment", "maisonette", "studio", "block of", "plots"]
+                    if any(word in full_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"]):
+                        print("      Skipped: Excluded property type (Flat/Apartment)")
+                        continue
 
-                        description = possible_descriptions[0] if possible_descriptions else "Description not available."
-
-                    matched_keywords = [
-                        keyword for keyword in DEAL_KEYWORDS
-                        if keyword in full_text_lower
-                    ]
-
+                    matched_keywords = [keyword for keyword in DEAL_KEYWORDS if keyword in full_text_lower]
                     if not matched_keywords:
                         print("      Skipped: no investor keywords found")
                         continue
 
-                    # Fixed: Integrated backend data ceiling filter verification block
+
                     price = extract_price(clean_segments)
                     if not is_price_under_threshold(price, max_threshold=70000):
-                        print(f"      Skipped: Price {price} exceeds £70k maximum allocation limit.")
+                        print(f"      Skipped: Price {price} exceeds £70k allocation limit.")
                         continue
 
-                    print("      📸 Using original property image URL")
-
+                    image_url = extract_image(page)
+                    description = extract_description(page, clean_segments)
                     title = extract_title(clean_segments, portal, area)
                     deal_score = calculate_deal_score(matched_keywords)
+
+                    postcode = extract_postcode(full_text)
+                    address = extract_address(clean_segments, postcode)
+                    street = extract_street(address)
 
                     reduced = "Yes" if any(
                         word in full_text_lower
@@ -503,6 +398,9 @@ def scrape_target(target, max_listings_to_check=20):
                         "title": title,
                         "price": price,
                         "description": description,
+                        "address": address,
+                        "postcode": postcode,
+                        "street": street,
                         "image_url": image_url,
                         "link": link,
                         "portal": portal,
@@ -516,15 +414,10 @@ def scrape_target(target, max_listings_to_check=20):
                         "grant_available": get_council_field(area, "grant_available"),
                         "council_source_url": get_council_field(area, "council_source_url"),
                         "council_notes": get_council_field(area, "council_notes"),
-                        "source_type": "on_market"
+                        "source_type": "on_market",
                     }
 
-                    print(
-                        f"      🎉 Deal found: {price} | "
-                        f"Score: {deal_score} | "
-                        f"{', '.join(matched_keywords[:4])}"
-                    )
-
+                    print(f"      🎉 Deal found: {price} | Score: {deal_score} | Postcode: {postcode or 'N/A'}")
                     save_deal_to_supabase(deal_data)
 
                 except Exception as e:
@@ -533,7 +426,9 @@ def scrape_target(target, max_listings_to_check=20):
         except Exception as e:
             print(f"   ⚠️ Search page error: {e}")
 
-        context.close()
+        finally:
+            # CRITICAL FIX: Shuts down context AND kills background browser processes to drop directory locks
+            context.close()
 
 
 # =========================
@@ -542,7 +437,7 @@ def scrape_target(target, max_listings_to_check=20):
 
 if __name__ == "__main__":
     print("⚡ UK PROPERTY INVESTOR SCRAPER ACTIVE ⚡")
-    print("Coverage: United Kingdom")
+    print("Coverage: United Kingdom | Allocation Limit: £70,000")
 
     for target in SEARCH_TARGETS:
         scrape_target(target, max_listings_to_check=20)

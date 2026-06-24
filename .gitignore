@@ -1,5 +1,5 @@
-.streamlit/secrets.toml
-chrome_rightmove_*
+.chromium_profiles/
 __pycache__/
 *.pyc
 .env
+.streamlit/
