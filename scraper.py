@@ -36,9 +36,10 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 # =========================
-# TARGET AREAS - UK WIDE MAX PRICE £40,000
+# TARGET AREAS - UK WIDE MAX PRICE £70,000
 # =========================
 
+MAX_PRICE = 70000
 
 RIGHTMOVE_REGIONS = {
     "Liverpool": "REGION%5E813",
@@ -53,19 +54,41 @@ RIGHTMOVE_REGIONS = {
     "Glasgow": "REGION%5E550",
 }
 
-SEARCH_TARGETS = [
-    {
-        "portal": "Rightmove",
-        "region": "United Kingdom",
-        "area": area,
-        "url": (
-            "https://www.rightmove.co.uk/property-for-sale/find.html"
-            f"?locationIdentifier={region_code}"
-            "&maxPrice=40000&sortType=6&includeSSTC=false"
-        ),
-    }
-    for area, region_code in RIGHTMOVE_REGIONS.items()
-]
+
+def build_search_targets() -> list[dict]:
+    targets = []
+
+    for area, region_code in RIGHTMOVE_REGIONS.items():
+        targets.append({
+            "portal": "Rightmove",
+            "region": "United Kingdom",
+            "area": area,
+            "url": (
+                "https://www.rightmove.co.uk/property-for-sale/find.html"
+                f"?locationIdentifier={region_code}"
+                f"&maxPrice={MAX_PRICE}&sortType=6&includeSSTC=false"
+            ),
+        })
+
+    for area in RIGHTMOVE_REGIONS:
+        slug = area.lower().replace(" ", "-")
+        targets.append({
+            "portal": "Zoopla",
+            "region": "United Kingdom",
+            "area": area,
+            "url": f"https://www.zoopla.co.uk/for-sale/property/{slug}/?price_max={MAX_PRICE}&q={area}",
+        })
+        targets.append({
+            "portal": "OnTheMarket",
+            "region": "United Kingdom",
+            "area": area,
+            "url": f"https://www.onthemarket.com/for-sale/property/{slug}/?max-price={MAX_PRICE}",
+        })
+
+    return targets
+
+
+SEARCH_TARGETS = build_search_targets()
 
 SOLD_STATUS_PHRASES = [
     "sold subject to contract",
@@ -143,6 +166,10 @@ def extract_links(page, portal: str) -> list[str]:
                 listing_links.append(clean_link)
 
         elif portal == "OnTheMarket" and "/details/" in href and "onthemarket.com" in href:
+            if clean_link not in listing_links:
+                listing_links.append(clean_link)
+
+        elif portal == "Zoopla" and "/for-sale/details/" in href and "/contact/" not in href:
             if clean_link not in listing_links:
                 listing_links.append(clean_link)
 
@@ -292,7 +319,7 @@ def calculate_deal_score(matched_keywords: list[str]) -> int:
 
 
 
-def is_price_under_threshold(price_text: str, max_threshold: int = 40000) -> bool:
+def is_price_under_threshold(price_text: str, max_threshold: int = MAX_PRICE) -> bool:
 
     try:
         clean_numeric_string = re.sub(r"[^\d]", "", price_text)
@@ -389,6 +416,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     page.wait_for_selector("a[href*='/properties/']", timeout=15000)
                 elif portal == "OnTheMarket":
                     page.wait_for_selector("a[href*='/details/']", timeout=15000)
+                elif portal == "Zoopla":
+                    page.wait_for_selector("a[href*='/for-sale/details/']", timeout=15000)
             except Exception:
                 pass
 
@@ -435,8 +464,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
 
 
                     price = extract_price(clean_segments)
-                    if not is_price_under_threshold(price, max_threshold=40000):
-                        print(f"      Skipped: Price {price} exceeds £40k allocation limit.")
+                    if not is_price_under_threshold(price):
+                        print(f"      Skipped: Price {price} exceeds £{MAX_PRICE:,} allocation limit.")
                         continue
 
                     image_url = extract_image(page)
@@ -496,7 +525,7 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
 
 if __name__ == "__main__":
     print("⚡ UK PROPERTY INVESTOR SCRAPER ACTIVE ⚡")
-    print("Coverage: United Kingdom | Allocation Limit: £70,000")
+    print(f"Coverage: United Kingdom | Allocation Limit: £{MAX_PRICE:,}")
 
     for target in SEARCH_TARGETS:
         scrape_target(target, max_listings_to_check=20)
