@@ -471,6 +471,14 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         print("      Skipped: Auction listing")
                         continue
 
+                    # 🚫 EXCLUDE PARKING SPACES/GARAGES LISTED AS THE PROPERTY ITSELF
+                    # ("parking" alone is too generic - it's a standard amenity field
+                    # on almost every listing - so match the specific for-sale phrasing.
+                    parking_phrases = ["parking space", "garage for sale", "lock-up garage"]
+                    if any(phrase in page_text_lower for phrase in parking_phrases) or "parking-space" in link.lower():
+                        print("      Skipped: Parking space/garage listing")
+                        continue
+
                     # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
                     if any(phrase in page_text_lower for phrase in SOLD_STATUS_PHRASES):
                         print("      Skipped: Already sold / under offer")
