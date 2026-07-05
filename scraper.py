@@ -446,14 +446,23 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     full_text = " ".join(clean_segments)
                     full_text_lower = full_text.lower()
 
+                    # h1/h2/h3/p/span/li misses text that only lives inside a <div>
+                    # (e.g. "PROPERTY TYPE Apartment" widgets), which let real flats
+                    # slip past the exclusion check below. Scan the whole rendered
+                    # body for these two hard-block checks instead.
+                    try:
+                        page_text_lower = page.inner_text("body").lower()
+                    except Exception:
+                        page_text_lower = full_text_lower
+
                     # 🚫 EXCLUDE FLATS AND APARTMENTS (Enhanced)
                     excluded_words = ["flat", "apartment", "maisonette", "studio", "block of", "plots"]
-                    if any(word in full_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"]):
+                    if any(word in page_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"]):
                         print("      Skipped: Excluded property type (Flat/Apartment)")
                         continue
 
                     # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
-                    if any(phrase in full_text_lower for phrase in SOLD_STATUS_PHRASES):
+                    if any(phrase in page_text_lower for phrase in SOLD_STATUS_PHRASES):
                         print("      Skipped: Already sold / under offer")
                         continue
 
