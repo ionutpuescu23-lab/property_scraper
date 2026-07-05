@@ -101,7 +101,7 @@ SOLD_STATUS_PHRASES = [
 ]
 
 DEAL_KEYWORDS = [
-    "auction", "renovation", "refurbishment", "refurb", "modernisation",
+    "renovation", "refurbishment", "refurb", "modernisation",
     "modernization", "project", "yield", "tenant", "tenanted", "reduced",
     "price drop", "investment", "development", "potential", "cash buyers",
     "in need of", "needs work", "requires work", "no onward chain",
@@ -308,7 +308,7 @@ def extract_street(address: str) -> str:
 
 def calculate_deal_score(matched_keywords: list[str]) -> int:
     scoring_rules = {
-        "auction": 5, "renovation": 5, "refurbishment": 5, "refurb": 4,
+        "renovation": 5, "refurbishment": 5, "refurb": 4,
         "modernisation": 4, "modernization": 4, "in need of": 4, "needs work": 4,
         "requires work": 4, "project": 3, "yield": 3, "investment": 3,
         "development": 3, "tenant": 2, "tenanted": 2, "reduced": 2,
@@ -464,6 +464,11 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     # 🚫 EXCLUDE SHARED OWNERSHIP
                     if "shared ownership" in page_text_lower or "shared-ownership" in link.lower():
                         print("      Skipped: Shared ownership")
+                        continue
+
+                    # 🚫 EXCLUDE AUCTIONS
+                    if "auction" in page_text_lower or "auction" in link.lower():
+                        print("      Skipped: Auction listing")
                         continue
 
                     # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
