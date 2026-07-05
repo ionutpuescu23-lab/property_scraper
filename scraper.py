@@ -67,6 +67,16 @@ SEARCH_TARGETS = [
     for area, region_code in RIGHTMOVE_REGIONS.items()
 ]
 
+SOLD_STATUS_PHRASES = [
+    "sold subject to contract",
+    "sold stc",
+    "sstc",
+    "under offer",
+    "sold, further details",
+    "no longer being marketed",
+    "property is no longer available",
+]
+
 DEAL_KEYWORDS = [
     "auction", "renovation", "refurbishment", "refurb", "modernisation",
     "modernization", "project", "yield", "tenant", "tenanted", "reduced",
@@ -411,6 +421,11 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     excluded_words = ["flat", "apartment", "maisonette", "studio", "block of", "plots"]
                     if any(word in full_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"]):
                         print("      Skipped: Excluded property type (Flat/Apartment)")
+                        continue
+
+                    # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
+                    if any(phrase in full_text_lower for phrase in SOLD_STATUS_PHRASES):
+                        print("      Skipped: Already sold / under offer")
                         continue
 
                     matched_keywords = [keyword for keyword in DEAL_KEYWORDS if keyword in full_text_lower]
