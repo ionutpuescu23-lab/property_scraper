@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 
 export function proxy(request: NextRequest) {
   // Hardcode a reliable temporary password here if the Vercel key fails to pass through
-  const expectedPassword = process.env.STAGING_PASSWORD || 'liverpool-deals-2026';
+  const expectedPassword = process.env.STAGING_PASSWORD || 'Amanda13';
   
   const authCookie = request.cookies.get('staging_auth')?.value;
   const url = request.nextUrl.clone();
