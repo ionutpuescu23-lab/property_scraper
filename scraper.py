@@ -41,36 +41,16 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MAX_PRICE = 70000
 
-RIGHTMOVE_REGIONS = {
-    "Liverpool": "REGION%5E813",
-    "Wirral": "REGION%5E1443",
-    "Manchester": "REGION%5E904",
-    "Leeds": "REGION%5E724",
-    "Sheffield": "REGION%5E1196",
-    "Birmingham": "REGION%5E152",
-    "Nottingham": "REGION%5E1019",
-    "Newcastle": "REGION%5E984",
-    "Cardiff": "REGION%5E271",
-    "Glasgow": "REGION%5E550",
-}
+TARGET_AREAS = [
+    "Liverpool", "Wirral", "Manchester", "Leeds", "Sheffield",
+    "Birmingham", "Nottingham", "Newcastle", "Cardiff", "Glasgow",
+]
 
 
 def build_search_targets() -> list[dict]:
     targets = []
 
-    for area, region_code in RIGHTMOVE_REGIONS.items():
-        targets.append({
-            "portal": "Rightmove",
-            "region": "United Kingdom",
-            "area": area,
-            "url": (
-                "https://www.rightmove.co.uk/property-for-sale/find.html"
-                f"?locationIdentifier={region_code}"
-                f"&maxPrice={MAX_PRICE}&sortType=6&includeSSTC=false"
-            ),
-        })
-
-    for area in RIGHTMOVE_REGIONS:
+    for area in TARGET_AREAS:
         slug = area.lower().replace(" ", "-")
         targets.append({
             "portal": "Zoopla",
@@ -161,11 +141,7 @@ def extract_links(page, portal: str) -> list[str]:
 
         clean_link = href.split("?")[0].split("#")[0]
 
-        if portal == "Rightmove" and "/properties/" in href and "find.html" not in href:
-            if clean_link not in listing_links:
-                listing_links.append(clean_link)
-
-        elif portal == "OnTheMarket" and "/details/" in href and "onthemarket.com" in href:
+        if portal == "OnTheMarket" and "/details/" in href and "onthemarket.com" in href:
             if clean_link not in listing_links:
                 listing_links.append(clean_link)
 
@@ -412,9 +388,7 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
 
             try:
 
-                if portal == "Rightmove":
-                    page.wait_for_selector("a[href*='/properties/']", timeout=15000)
-                elif portal == "OnTheMarket":
+                if portal == "OnTheMarket":
                     page.wait_for_selector("a[href*='/details/']", timeout=15000)
                 elif portal == "Zoopla":
                     page.wait_for_selector("a[href*='/for-sale/details/']", timeout=15000)
