@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 import tomllib
 
-
+import psutil
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from supabase import create_client, Client
@@ -211,7 +211,28 @@ def extract_price(clean_segments: list[str]) -> str:
 
     return "Price not available"
 
-def extract_title(clean_segments: list[str], portal: str, area: str) -> str:
+def extract_title(page, clean_segments: list[str], portal: str, area: str) -> str:
+    # Rightmove/OnTheMarket set an accurate per-listing og:title; page chrome
+    # (nav links like "Sold House Prices") pollutes clean_segments and used to
+    # get picked up as the title instead of the real listing heading.
+    try:
+        og_title = page.locator("meta[property='og:title']").first.get_attribute("content")
+        if og_title:
+            cleaned = og_title.split(" | ")[0].split(" - Rightmove")[0].strip()
+            cleaned = re.sub(r"^Check out this\s+", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s+on Rightmove$", "", cleaned, flags=re.IGNORECASE)
+            if cleaned:
+                return cleaned[0].upper() + cleaned[1:]
+    except Exception:
+        pass
+
+    try:
+        h1_text = page.locator("h1").first.text_content()
+        if h1_text and len(h1_text.strip()) > 3:
+            return h1_text.strip()
+    except Exception:
+        pass
+
     for segment in clean_segments:
         lower = segment.lower()
         if any(word in lower for word in ["house", "terrace", "bungalow"]): # removed apartment/flat
@@ -277,6 +298,27 @@ def is_price_under_threshold(price_text: str, max_threshold: int = 40000) -> boo
 
 
 
+def kill_stale_profile_processes(profile_dir: Path) -> None:
+    """Kill leftover Chrome processes still holding a lock on this profile dir.
+
+    A crashed or forcibly-killed prior run (e.g. a scheduled task terminated
+    mid-execution) can leave orphaned chrome.exe processes bound to a specific
+    .chromium_profiles/<region> directory, which then blocks the next
+    launch_persistent_context() call for that same region.
+    """
+    profile_str = str(profile_dir).lower()
+    for proc in psutil.process_iter(["name", "cmdline"]):
+        try:
+            name = (proc.info["name"] or "").lower()
+            if "chrome" not in name:
+                continue
+            cmdline = " ".join(proc.info["cmdline"] or []).lower()
+            if profile_str in cmdline:
+                proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+
 # =========================
 # MAIN SCRAPER
 # =========================
@@ -291,6 +333,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
     # Explicitly pull user profile folders into a hidden workspace folder
     profile_dir = Path(__file__).parent / ".chromium_profiles" / f"{portal.lower()}_{area.lower().replace(' ', '_')}"
     profile_dir.parent.mkdir(exist_ok=True)
+
+    kill_stale_profile_processes(profile_dir)
 
     with sync_playwright() as p:
         # Launching with dedicated unique profile locations to stop file collisions
@@ -382,7 +426,7 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
 
                     image_url = extract_image(page)
                     description = extract_description(page, clean_segments)
-                    title = extract_title(clean_segments, portal, area)
+                    title = extract_title(page, clean_segments, portal, area)
                     deal_score = calculate_deal_score(matched_keywords)
 
                     postcode = extract_postcode(full_text)
