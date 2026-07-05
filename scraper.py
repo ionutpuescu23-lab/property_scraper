@@ -461,6 +461,11 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         print("      Skipped: Excluded property type (Flat/Apartment)")
                         continue
 
+                    # 🚫 EXCLUDE SHARED OWNERSHIP
+                    if "shared ownership" in page_text_lower or "shared-ownership" in link.lower():
+                        print("      Skipped: Shared ownership")
+                        continue
+
                     # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
                     if any(phrase in page_text_lower for phrase in SOLD_STATUS_PHRASES):
                         print("      Skipped: Already sold / under offer")
