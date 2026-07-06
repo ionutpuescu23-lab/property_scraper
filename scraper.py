@@ -1,6 +1,7 @@
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 import tomllib
 
@@ -80,12 +81,24 @@ SOLD_STATUS_PHRASES = [
     "property is no longer available",
 ]
 
+# A motivated-seller signal, not a status to skip - checked BEFORE
+# SOLD_STATUS_PHRASES so "no longer under offer" doesn't get wrongly
+# excluded by the bare "under offer" substring check.
+BACK_ON_MARKET_PHRASES = [
+    "back on the market", "back on market", "chain broken", "chain has broken",
+    "sale fell through", "previous sale fell through", "no longer under offer",
+    "buyer pulled out", "buyer withdrew",
+]
+
 DEAL_KEYWORDS = [
     "renovation", "refurbishment", "refurb", "modernisation",
     "modernization", "project", "yield", "tenant", "tenanted", "reduced",
     "price drop", "investment", "development", "potential", "cash buyers",
     "in need of", "needs work", "requires work", "no onward chain",
-]
+] + BACK_ON_MARKET_PHRASES
+
+# 90-120+ days on market is the "slow burn" motivated-seller signal
+SLOW_BURN_DAYS_THRESHOLD = 90
 
 COUNCIL_INFO = {
     "Liverpool": {
@@ -282,16 +295,55 @@ def extract_street(address: str) -> str:
     return street
 
 
-def calculate_deal_score(matched_keywords: list[str]) -> int:
+def calculate_deal_score(
+    matched_keywords: list[str],
+    days_on_market: int | None = None,
+    price_reduction_count: int = 0,
+) -> int:
     scoring_rules = {
         "renovation": 5, "refurbishment": 5, "refurb": 4,
         "modernisation": 4, "modernization": 4, "in need of": 4, "needs work": 4,
         "requires work": 4, "project": 3, "yield": 3, "investment": 3,
         "development": 3, "tenant": 2, "tenanted": 2, "reduced": 2,
         "price drop": 2, "cash buyers": 2, "no onward chain": 1, "potential": 1,
+        "back on the market": 5, "back on market": 5, "chain broken": 5,
+        "chain has broken": 5, "sale fell through": 5, "previous sale fell through": 5,
+        "no longer under offer": 4, "buyer pulled out": 4, "buyer withdrew": 4,
     }
 
-    return sum(scoring_rules.get(keyword, 0) for keyword in matched_keywords)
+    score = sum(scoring_rules.get(keyword, 0) for keyword in matched_keywords)
+
+    if days_on_market is not None and days_on_market >= SLOW_BURN_DAYS_THRESHOLD:
+        score += 3
+
+    score += min(price_reduction_count, 3) * 2  # up to +6 for repeated reductions
+
+    return score
+
+
+def extract_listing_age(page_text_lower: str) -> dict:
+    """
+    Parses "Added on DD/MM/YYYY" and counts "Reduced on DD/MM/YYYY" occurrences
+    directly from a single page visit - no historical tracking needed to spot
+    a stale, repeatedly-reduced "slow burn" listing.
+    """
+    added_match = re.search(r"added on (\d{2}/\d{2}/\d{4})", page_text_lower)
+    reduction_dates = re.findall(r"reduced on (\d{2}/\d{2}/\d{4})", page_text_lower)
+
+    listed_date = None
+    days_on_market = None
+    if added_match:
+        try:
+            listed_date = datetime.strptime(added_match.group(1), "%d/%m/%Y").date()
+            days_on_market = (datetime.now().date() - listed_date).days
+        except ValueError:
+            pass
+
+    return {
+        "listed_date": listed_date.isoformat() if listed_date else None,
+        "days_on_market": days_on_market,
+        "price_reduction_count": len(reduction_dates),
+    }
 
 
 
@@ -453,12 +505,23 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         print("      Skipped: Parking space/garage listing")
                         continue
 
+                    # A "back on market" listing is a motivated-seller signal, not
+                    # a status to skip - check first so phrases like "no longer
+                    # under offer" don't trip the sold/under-offer exclusion below.
+                    is_back_on_market = any(phrase in page_text_lower for phrase in BACK_ON_MARKET_PHRASES)
+
                     # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
-                    if any(phrase in page_text_lower for phrase in SOLD_STATUS_PHRASES):
+                    if not is_back_on_market and any(phrase in page_text_lower for phrase in SOLD_STATUS_PHRASES):
                         print("      Skipped: Already sold / under offer")
                         continue
 
                     matched_keywords = [keyword for keyword in DEAL_KEYWORDS if keyword in full_text_lower]
+                    # Back-on-market phrases can live in div-only widgets full_text_lower
+                    # misses (same class of issue as the flat/apartment check above).
+                    matched_keywords += [
+                        phrase for phrase in BACK_ON_MARKET_PHRASES
+                        if phrase in page_text_lower and phrase not in matched_keywords
+                    ]
                     if not matched_keywords:
                         print("      Skipped: no investor keywords found")
                         continue
@@ -472,7 +535,12 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     image_url = extract_image(page)
                     description = extract_description(page, clean_segments)
                     title = extract_title(page, clean_segments, portal, area)
-                    deal_score = calculate_deal_score(matched_keywords)
+                    listing_age = extract_listing_age(page_text_lower)
+                    deal_score = calculate_deal_score(
+                        matched_keywords,
+                        days_on_market=listing_age["days_on_market"],
+                        price_reduction_count=listing_age["price_reduction_count"],
+                    )
 
                     postcode = extract_postcode(full_text)
                     address = extract_address(clean_segments, postcode)
@@ -504,6 +572,10 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         "council_source_url": get_council_field(area, "council_source_url"),
                         "council_notes": get_council_field(area, "council_notes"),
                         "source_type": "on_market",
+                        "listed_date": listing_age["listed_date"],
+                        "days_on_market": listing_age["days_on_market"],
+                        "price_reduction_count": listing_age["price_reduction_count"],
+                        "back_on_market": is_back_on_market,
                     }
 
                     print(f"      🎉 Deal found: {price} | Score: {deal_score} | Postcode: {postcode or 'N/A'}")
