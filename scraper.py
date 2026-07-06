@@ -508,7 +508,11 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     # A "back on market" listing is a motivated-seller signal, not
                     # a status to skip - check first so phrases like "no longer
                     # under offer" don't trip the sold/under-offer exclusion below.
-                    is_back_on_market = any(phrase in page_text_lower for phrase in BACK_ON_MARKET_PHRASES)
+                    back_on_market_reason = next(
+                        (phrase for phrase in BACK_ON_MARKET_PHRASES if phrase in page_text_lower),
+                        None,
+                    )
+                    is_back_on_market = back_on_market_reason is not None
 
                     # 🚫 EXCLUDE SOLD / UNDER OFFER (backup to includeSSTC=false, which can lag)
                     if not is_back_on_market and any(phrase in page_text_lower for phrase in SOLD_STATUS_PHRASES):
@@ -575,7 +579,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         "listed_date": listing_age["listed_date"],
                         "days_on_market": listing_age["days_on_market"],
                         "price_reduction_count": listing_age["price_reduction_count"],
-                        "back_on_market": is_back_on_market,
+                        "is_back_on_market": is_back_on_market,
+                        "back_on_market_reason": back_on_market_reason,
                     }
 
                     print(f"      🎉 Deal found: {price} | Score: {deal_score} | Postcode: {postcode or 'N/A'}")
