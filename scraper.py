@@ -70,6 +70,15 @@ def build_search_targets() -> list[dict]:
             # Same /houses/ vs /property/ distinction as Zoopla above.
             "url": f"https://www.onthemarket.com/for-sale/houses/{slug}/?max-price={MAX_PRICE}",
         })
+        targets.append({
+            "portal": "Gumtree",
+            "region": "United Kingdom",
+            "area": area,
+            # Classifieds site - genuine private-seller/small-agency inventory not
+            # syndicated to the big portals. Each listing has a structured
+            # "Seller Type: Agency/Private" field we tag in keywords_found.
+            "url": f"https://www.gumtree.com/flats-houses/property-for-sale/uk/{slug}?search_category=property-for-sale&max_price={MAX_PRICE}",
+        })
 
     return targets
 
@@ -170,6 +179,10 @@ def extract_links(page, portal: str) -> list[str]:
                 listing_links.append(clean_link)
 
         elif portal == "Zoopla" and "/for-sale/details/" in href and "/contact/" not in href:
+            if clean_link not in listing_links:
+                listing_links.append(clean_link)
+
+        elif portal == "Gumtree" and "/p/property-for-sale/" in href:
             if clean_link not in listing_links:
                 listing_links.append(clean_link)
 
@@ -323,7 +336,7 @@ def calculate_deal_score(
         "no longer under offer": 4, "buyer pulled out": 4, "buyer withdrew": 4,
         "re-offered": 4, "chain collapsed": 5, "collapsed sale": 5, "fallen through": 4,
         "structural work": 4, "deceased estate": 4, "probate": 4,
-        "cracking": 5, "subsidence": 5,
+        "cracking": 5, "subsidence": 5, "private seller": 3,
     }
 
     score = sum(scoring_rules.get(keyword, 0) for keyword in matched_keywords)
@@ -459,6 +472,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     page.wait_for_selector("a[href*='/details/']", timeout=15000)
                 elif portal == "Zoopla":
                     page.wait_for_selector("a[href*='/for-sale/details/']", timeout=15000)
+                elif portal == "Gumtree":
+                    page.wait_for_selector("a[href*='/p/property-for-sale/']", timeout=15000)
             except Exception:
                 pass
 
@@ -501,7 +516,20 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         "flat", "apartment", "maisonette", "studio", "block of", "plots",
                         "duplex", "penthouse",
                     ]
-                    if any(word in page_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"]):
+                    if portal == "Gumtree":
+                        # Gumtree's own site-wide "See our Flats and Housing Posting
+                        # Rules" disclaimer appears on every listing regardless of
+                        # property type - the blind substring scan below would wrongly
+                        # exclude 100% of Gumtree listings. Use its structured
+                        # "Property Type" field instead (confirmed live: "Property
+                        # Type House" vs "Property Type Flat").
+                        ptype_idx = page_text_lower.find("property type")
+                        ptype_snippet = page_text_lower[ptype_idx:ptype_idx + 40] if ptype_idx != -1 else ""
+                        is_excluded_type = any(word in ptype_snippet for word in excluded_words)
+                    else:
+                        is_excluded_type = any(word in page_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"])
+
+                    if is_excluded_type:
                         print("      Skipped: Excluded property type (Flat/Apartment)")
                         continue
 
@@ -544,6 +572,16 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         phrase for phrase in BACK_ON_MARKET_PHRASES
                         if phrase in page_text_lower and phrase not in matched_keywords
                     ]
+
+                    # Gumtree exposes a structured "Seller Type" field - tag genuine
+                    # no-agent listings as their own signal (a direct-owner deal is
+                    # itself worth surfacing, even with no other DEAL_KEYWORDS match).
+                    if portal == "Gumtree":
+                        seller_type_idx = page_text_lower.find("seller type")
+                        seller_type_snippet = page_text_lower[seller_type_idx:seller_type_idx + 30] if seller_type_idx != -1 else ""
+                        if "private" in seller_type_snippet:
+                            matched_keywords.append("private seller")
+
                     if not matched_keywords:
                         print("      Skipped: no investor keywords found")
                         continue
