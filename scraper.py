@@ -57,13 +57,18 @@ def build_search_targets() -> list[dict]:
             "portal": "Zoopla",
             "region": "United Kingdom",
             "area": area,
-            "url": f"https://www.zoopla.co.uk/for-sale/property/{slug}/?price_max={MAX_PRICE}&q={area}",
+            # /for-sale/houses/ (not /property/) excludes flats/apartments/studios
+            # at the search level - verified live: 0/5 sampled listings mentioned
+            # flat/apartment/studio, vs. needing to visit and skip most of them
+            # under /for-sale/property/.
+            "url": f"https://www.zoopla.co.uk/for-sale/houses/{slug}/?price_max={MAX_PRICE}&q={area}",
         })
         targets.append({
             "portal": "OnTheMarket",
             "region": "United Kingdom",
             "area": area,
-            "url": f"https://www.onthemarket.com/for-sale/property/{slug}/?max-price={MAX_PRICE}",
+            # Same /houses/ vs /property/ distinction as Zoopla above.
+            "url": f"https://www.onthemarket.com/for-sale/houses/{slug}/?max-price={MAX_PRICE}",
         })
 
     return targets
