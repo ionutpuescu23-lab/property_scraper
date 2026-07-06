@@ -87,15 +87,21 @@ SOLD_STATUS_PHRASES = [
 BACK_ON_MARKET_PHRASES = [
     "back on the market", "back on market", "chain broken", "chain has broken",
     "sale fell through", "previous sale fell through", "no longer under offer",
-    "buyer pulled out", "buyer withdrew",
+    "buyer pulled out", "buyer withdrew", "re-offered", "chain collapsed",
+    "collapsed sale", "fallen through",
+]
+
+# Distress signals beyond the original DEAL_KEYWORDS list
+DISTRESS_KEYWORDS = [
+    "structural work", "deceased estate", "probate", "cracking", "subsidence",
 ]
 
 DEAL_KEYWORDS = [
     "renovation", "refurbishment", "refurb", "modernisation",
     "modernization", "project", "yield", "tenant", "tenanted", "reduced",
     "price drop", "investment", "development", "potential", "cash buyers",
-    "in need of", "needs work", "requires work", "no onward chain",
-] + BACK_ON_MARKET_PHRASES
+    "in need of", "needs work", "requires work", "no onward chain", "no upward chain",
+] + BACK_ON_MARKET_PHRASES + DISTRESS_KEYWORDS
 
 # 90-120+ days on market is the "slow burn" motivated-seller signal
 SLOW_BURN_DAYS_THRESHOLD = 90
@@ -305,10 +311,14 @@ def calculate_deal_score(
         "modernisation": 4, "modernization": 4, "in need of": 4, "needs work": 4,
         "requires work": 4, "project": 3, "yield": 3, "investment": 3,
         "development": 3, "tenant": 2, "tenanted": 2, "reduced": 2,
-        "price drop": 2, "cash buyers": 2, "no onward chain": 1, "potential": 1,
+        "price drop": 2, "cash buyers": 2, "no onward chain": 1, "no upward chain": 1,
+        "potential": 1,
         "back on the market": 5, "back on market": 5, "chain broken": 5,
         "chain has broken": 5, "sale fell through": 5, "previous sale fell through": 5,
         "no longer under offer": 4, "buyer pulled out": 4, "buyer withdrew": 4,
+        "re-offered": 4, "chain collapsed": 5, "collapsed sale": 5, "fallen through": 4,
+        "structural work": 4, "deceased estate": 4, "probate": 4,
+        "cracking": 5, "subsidence": 5,
     }
 
     score = sum(scoring_rules.get(keyword, 0) for keyword in matched_keywords)
@@ -482,7 +492,10 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         page_text_lower = full_text_lower
 
                     # 🚫 EXCLUDE FLATS AND APARTMENTS (Enhanced)
-                    excluded_words = ["flat", "apartment", "maisonette", "studio", "block of", "plots"]
+                    excluded_words = [
+                        "flat", "apartment", "maisonette", "studio", "block of", "plots",
+                        "duplex", "penthouse",
+                    ]
                     if any(word in page_text_lower for word in excluded_words) or any(word in link.lower() for word in ["flat", "apartment"]):
                         print("      Skipped: Excluded property type (Flat/Apartment)")
                         continue
