@@ -85,6 +85,42 @@ def build_search_targets() -> list[dict]:
 
 SEARCH_TARGETS = build_search_targets()
 
+
+def build_auction_targets() -> list[dict]:
+    """
+    A distinct, opt-in auction-opportunities category - kept fully separate
+    from SEARCH_TARGETS, which still excludes auctions entirely. Each target
+    is tagged is_auction=True so scrape_target() skips the auction exclusion
+    and tags saved rows with is_auction for the dashboard to filter on.
+    """
+    targets = []
+
+    for area in TARGET_AREAS:
+        slug = area.lower().replace(" ", "-")
+        targets.append({
+            "portal": "OnTheMarket",
+            "region": "United Kingdom",
+            "area": area,
+            "url": f"https://www.onthemarket.com/auction/property/{slug}/?max-price={MAX_PRICE}",
+            "is_auction": True,
+        })
+
+    # Regional catalogue, not split per-city like the portals above - verified
+    # live: no per-city URL param, one search-results page covers the whole
+    # North West.
+    targets.append({
+        "portal": "Auction House NW",
+        "region": "North West",
+        "area": "North West",
+        "url": "https://www.auctionhouse.co.uk/northwest/auction/search-results",
+        "is_auction": True,
+    })
+
+    return targets
+
+
+AUCTION_TARGETS = build_auction_targets()
+
 SOLD_STATUS_PHRASES = [
     "sold subject to contract",
     "sold stc",
@@ -183,6 +219,10 @@ def extract_links(page, portal: str) -> list[str]:
                 listing_links.append(clean_link)
 
         elif portal == "Gumtree" and "/p/property-for-sale/" in href:
+            if clean_link not in listing_links:
+                listing_links.append(clean_link)
+
+        elif portal == "Auction House NW" and "/northwest/auction/lot/" in href:
             if clean_link not in listing_links:
                 listing_links.append(clean_link)
 
@@ -336,7 +376,7 @@ def calculate_deal_score(
         "no longer under offer": 4, "buyer pulled out": 4, "buyer withdrew": 4,
         "re-offered": 4, "chain collapsed": 5, "collapsed sale": 5, "fallen through": 4,
         "structural work": 4, "deceased estate": 4, "probate": 4,
-        "cracking": 5, "subsidence": 5, "private seller": 3,
+        "cracking": 5, "subsidence": 5, "private seller": 3, "auction": 3,
     }
 
     score = sum(scoring_rules.get(keyword, 0) for keyword in matched_keywords)
@@ -420,6 +460,7 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
     region = target["region"]
     area = target["area"]
     search_url = target["url"]
+    is_auction_target = target.get("is_auction", False)
 
     print(f"\n🚀 Searching {portal} | {area}, {region}")
 
@@ -474,6 +515,8 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                     page.wait_for_selector("a[href*='/for-sale/details/']", timeout=15000)
                 elif portal == "Gumtree":
                     page.wait_for_selector("a[href*='/p/property-for-sale/']", timeout=15000)
+                elif portal == "Auction House NW":
+                    page.wait_for_selector("a[href*='/northwest/auction/lot/']", timeout=15000)
             except Exception:
                 pass
 
@@ -538,8 +581,9 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         print("      Skipped: Shared ownership")
                         continue
 
-                    # 🚫 EXCLUDE AUCTIONS
-                    if "auction" in page_text_lower or "auction" in link.lower():
+                    # 🚫 EXCLUDE AUCTIONS (unless this target is itself a dedicated
+                    # auction-opportunities source - see AUCTION_TARGETS)
+                    if not is_auction_target and ("auction" in page_text_lower or "auction" in link.lower()):
                         print("      Skipped: Auction listing")
                         continue
 
@@ -581,6 +625,11 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         seller_type_snippet = page_text_lower[seller_type_idx:seller_type_idx + 30] if seller_type_idx != -1 else ""
                         if "private" in seller_type_snippet:
                             matched_keywords.append("private seller")
+
+                    # This target IS the auction category - "auction" is the point,
+                    # not a keyword to require alongside something else.
+                    if is_auction_target:
+                        matched_keywords.append("auction")
 
                     if not matched_keywords:
                         print("      Skipped: no investor keywords found")
@@ -637,6 +686,7 @@ def scrape_target(target: dict, max_listings_to_check: int = 20) -> None:
                         "price_reduction_count": listing_age["price_reduction_count"],
                         "is_back_on_market": is_back_on_market,
                         "back_on_market_reason": back_on_market_reason,
+                        "is_auction": is_auction_target,
                     }
 
                     print(f"      🎉 Deal found: {price} | Score: {deal_score} | Postcode: {postcode or 'N/A'}")
@@ -662,6 +712,10 @@ if __name__ == "__main__":
     print(f"Coverage: United Kingdom | Allocation Limit: £{MAX_PRICE:,}")
 
     for target in SEARCH_TARGETS:
+        scrape_target(target, max_listings_to_check=20)
+
+    print("\n🏛️  AUCTION OPPORTUNITIES (distinct category, tagged is_auction=true) 🏛️")
+    for target in AUCTION_TARGETS:
         scrape_target(target, max_listings_to_check=20)
 
     print("\n🎉 Finished. Check your Supabase property_deals table.")
