@@ -46,6 +46,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Catch everything except static assets
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // Catch everything except static assets and PWA files (manifest/icons/service
+  // worker are harmless branding/tech assets, not investor data - gating them
+  // just makes phone install prompts fragile since browsers fetch these
+  // without necessarily carrying the staging_auth cookie in every context).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|apple-icon.png|icons/).*)'],
 };
